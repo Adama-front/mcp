@@ -1,90 +1,293 @@
 # Bondoukou MCP
 
-Serveur [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) écrit en TypeScript. Il expose un outil de recherche de prestataires à partir d'un fichier JSON local et des fonctions pour valider des prestataires importés depuis un fichier CSV.
+Serveur MCP permettant de rechercher des prestataires de services à Bondoukou, en Côte d'Ivoire. Le projet vise à faciliter, à terme, la recherche de professionnels locaux comme les électriciens, plombiers et autres prestataires.
 
-## Fonctionnalités
+Le projet est actuellement en phase de développement. Il utilise des données locales au format JSON et comprend un premier système d'import de prestataires depuis des fichiers CSV.
 
-- Recherche par métier et par ville via l'outil MCP `search_providers`.
-- Exclusion par défaut des prestataires qui ne sont pas vérifiés.
-- Validation de données prestataires avec un schéma partagé.
-- Analyse de fichiers CSV, avec signalement des lignes invalides et des identifiants en double.
+> **État actuel :** le moteur de recherche, la validation des données, la détection des doublons, la sauvegarde sécurisée et les tests automatisés sont implémentés. La collecte et la vérification de véritables prestataires restent à réaliser.
 
-L'import CSV est actuellement une fonction de traitement et un script de démonstration : il ne modifie pas `data/providers.json` et n'est pas exposé comme outil MCP.
+## 1. Objectifs du projet
 
-## Prérequis
+- Rechercher des prestataires par métier et par ville.
+- Structurer et valider les informations des prestataires.
+- Importer des données depuis des fichiers CSV.
+- Refuser les identifiants déjà enregistrés.
+- Conserver les prestataires existants lors d'un ajout.
+- Protéger le fichier principal pendant la sauvegarde.
+- Distinguer les prestataires vérifiés de ceux en attente de vérification.
+- Exposer la recherche via un outil MCP.
 
-- Node.js et npm.
+## 2. Technologies utilisées
 
-## Installation et démarrage
+| Technologie                  | Utilisation                         |
+| ---------------------------- | ----------------------------------- |
+| TypeScript                   | Langage principal                   |
+| Node.js                      | Environnement d'exécution           |
+| Model Context Protocol (MCP) | Exposition des outils de recherche  |
+| Zod v4                       | Validation des données              |
+| `csv-parse`                  | Lecture et analyse des fichiers CSV |
+| Vitest                       | Tests automatisés                   |
+| `tsx`                        | Exécution des fichiers TypeScript   |
+| npm                          | Gestion des scripts et dépendances  |
 
-À la racine du projet, installez les dépendances puis démarrez le serveur :
+## 3. Architecture du projet
+
+```text
+bondoukou-mcp/
+├── data/
+│   └── providers.json
+├── imports/
+│   ├── incoming/
+│   │   └── demo-providers.csv
+│   ├── processed/
+│   └── rejected/
+├── scripts/
+│   └── test-csv-import.ts
+├── src/
+│   ├── application/
+│   │   ├── import/
+│   │   │   ├── import-providers-csv.ts
+│   │   │   └── filter-existing-providers.ts
+│   │   └── search-providers.ts
+│   ├── domain/
+│   │   └── providers.ts
+│   ├── infrastructure/
+│   │   └── provider-store.ts
+│   └── index.ts
+├── tests/
+│   ├── search-providers.test.ts
+│   ├── import-providers-csv.test.ts
+│   ├── filter-existing-providers.test.ts
+│   ├── provider-store.test.ts
+│   └── provider-import.integration.test.ts
+├── package.json
+├── package-lock.json
+└── README.md
+```
+
+### Responsabilités des dossiers
+
+- `domain/` : définition et validation du modèle métier des prestataires.
+- `application/` : logique de recherche, import CSV et filtrage des doublons.
+- `infrastructure/` : lecture et sauvegarde des données locales.
+- `scripts/` : exécution manuelle de l'import CSV.
+- `tests/` : tests unitaires et test d'intégration.
+- `data/` : fichier JSON contenant les prestataires enregistrés.
+- `imports/` : organisation des fichiers CSV entrants et des futurs fichiers traités ou rejetés.
+
+## 4. Modèle de données
+
+Le modèle `Provider` est défini et validé avec Zod dans `src/domain/providers.ts`.
+
+| Champ                | Description                       |
+| -------------------- | --------------------------------- |
+| `id`                 | Identifiant unique du prestataire |
+| `name`               | Nom du prestataire                |
+| `category`           | Métier ou catégorie de service    |
+| `city`               | Ville ; Bondoukou par défaut      |
+| `neighborhood`       | Quartier facultatif               |
+| `phone`              | Téléphone facultatif              |
+| `address`            | Adresse facultative               |
+| `source`             | Provenance déclarée des données   |
+| `verificationStatus` | État de vérification              |
+| `updatedAt`          | Date de dernière mise à jour      |
+
+Les sources autorisées sont :
+
+- `business_owner`
+- `field_visit`
+- `public_directory`
+- `imported_file`
+
+Les statuts autorisés sont :
+
+- `pending` : en attente de vérification ;
+- `verified` : vérifié ;
+- `rejected` : rejeté.
+
+Les prestataires importés depuis un CSV sont automatiquement marqués `imported_file` et `pending`. L'import ne doit pas être considéré comme une preuve de l'existence réelle d'un prestataire.
+
+## 5. Fonctionnalités implémentées
+
+### Recherche de prestataires
+
+Fichier : `src/application/search-providers.ts`
+
+La recherche permet de filtrer les prestataires selon :
+
+- le métier ou la catégorie ;
+- la ville ;
+- le statut de vérification.
+
+Par défaut, seuls les prestataires `verified` sont retournés. L'option `includeUnverified` permet d'inclure les prestataires non vérifiés.
+
+### Validation et import CSV
+
+Fichier : `src/application/import/import-providers-csv.ts`
+
+Le système :
+
+- lit un CSV avec en-têtes ;
+- prend en charge le BOM et les lignes vides ;
+- valide les données avec le schéma Zod ;
+- applique Bondoukou comme ville par défaut ;
+- attribue la source `imported_file` et le statut `pending` ;
+- détecte les identifiants dupliqués dans le même fichier ;
+- retourne les prestataires valides et les erreurs ;
+- conserve des informations de ligne pour faciliter la correction des erreurs.
+
+### Filtrage des prestataires existants
+
+Fichier : `src/application/import/filter-existing-providers.ts`
+
+Le filtrage refuse les identifiants déjà enregistrés et évite également d'accepter deux fois le même identifiant dans un même lot.
+
+### Sauvegarde sécurisée
+
+Fichier : `src/infrastructure/provider-store.ts`
+
+La fonction `saveNewProviders()` :
+
+1. lit et valide les données existantes ;
+2. filtre les identifiants déjà présents ;
+3. prépare la liste fusionnée ;
+4. écrit le nouveau contenu dans un fichier temporaire unique ;
+5. remplace le fichier principal après l'écriture réussie ;
+6. tente de nettoyer le fichier temporaire en cas d'échec.
+
+Le fichier JSON existant n'est pas remplacé si sa lecture ou sa validation échoue.
+
+### Serveur MCP
+
+Fichier : `src/index.ts`
+
+Le serveur expose l'outil `search_providers`, qui permet d'interroger les prestataires locaux à partir des critères de recherche disponibles.
+
+## 6. Installation
+
+Prérequis :
+
+- Node.js ;
+- npm ;
+- Git.
+
+Cloner le dépôt :
+
+```bash
+git clone <URL_DU_DEPOT>
+cd bondoukou-mcp
+```
+
+Installer les dépendances :
 
 ```bash
 npm install
-npm start
 ```
 
-Le serveur communique avec son client MCP via stdio. Configurez votre client MCP pour lancer `npm start` depuis le dossier du projet.
+## 7. Commandes disponibles
 
-## Outil MCP : `search_providers`
-
-| Paramètre | Type | Défaut | Description |
-| --- | --- | --- | --- |
-| `service` | chaîne, facultative | Aucun filtre | Métier recherché. La recherche correspond à une partie de la catégorie et ne tient pas compte des majuscules/minuscules. |
-| `city` | chaîne | `Bondoukou` | Ville recherchée ; la comparaison ne tient pas compte des majuscules/minuscules. |
-| `includeUnverified` | booléen | `false` | Si `true`, inclut les prestataires dont le statut n'est pas `verified`. |
-
-Les résultats correspondent aux prestataires présents dans `data/providers.json`. Ils sont renvoyés sous forme de texte JSON. Si aucun résultat ne correspond, l'outil renvoie un message explicatif.
-
-Chaque prestataire comporte les champs suivants :
-
-- `id`, `name`, `category` et `city` ;
-- `neighborhood`, `phone` et `address`, facultatifs ;
-- `source` : `business_owner`, `field_visit`, `public_directory` ou `imported_file` ;
-- `verificationStatus` : `pending`, `verified` ou `rejected` ;
-- `updatedAt`, une date au format ISO.
-
-Le schéma est défini dans [`src/domain/providers.ts`](src/domain/providers.ts). Le fichier de données doit contenir un tableau d'objets conformes à ce schéma.
-
-## Import CSV
-
-La fonction `importProvidersCsv` analyse le contenu CSV en mémoire. Les colonnes requises sont `id`, `name` et `category`. Les colonnes `city`, `neighborhood`, `phone` et `address` sont facultatives ; `city` vaut `Bondoukou` si elle est absente ou vide.
-
-Les enregistrements importés reçoivent la source `imported_file` et le statut `pending` afin qu'ils restent exclus des résultats de recherche par défaut jusqu'à vérification. Les lignes invalides et les identifiants répétés dans le fichier sont retournés dans une liste d'erreurs, sans empêcher le traitement des autres lignes valides.
-
-Le module `filterExistingProviders` permet également d'écarter les identifiants déjà présents dans une liste de prestataires. Ces fonctions ne sauvegardent pas elles-mêmes leurs résultats.
-
-Pour exécuter le script de démonstration inclus :
+### Vérifier les types TypeScript
 
 ```bash
-npx tsx scripts/test-csv-import.ts
-```
-
-Il lit `imports/incoming/demo-providers.csv` et affiche les enregistrements valides, les erreurs et un résumé. Le CSV de démonstration contient des données fictives.
-
-## Tests et vérification
-
-```bash
-npm test
 npm run typecheck
 ```
 
-Les tests couvrent la recherche, la validation CSV et le filtrage des identifiants déjà enregistrés.
+### Exécuter les tests
 
-## Organisation du projet
-
-```text
-src/
-  application/
-    import/       # Analyse CSV et filtrage des identifiants existants
-    search-providers.ts
-  domain/         # Schéma et type Provider
-  infrastructure/ # Lecture et validation du fichier JSON local
-  index.ts        # Serveur MCP et définition de l'outil
-data/
-  providers.json
-imports/
-  incoming/       # CSV de démonstration
-scripts/          # Script de démonstration de l'import CSV
-tests/
+```bash
+npm test
 ```
+
+### Démarrer le serveur MCP
+
+```bash
+npm start
+```
+
+Le serveur utilise le transport standard d'entrée/sortie (`stdio`). Il doit être lancé par un client MCP compatible et configuré dans celui-ci pour être utilisé.
+
+### Simuler un import CSV
+
+```bash
+npm run import:providers
+```
+
+Cette commande lit `imports/incoming/demo-providers.csv`, valide les données et affiche un rapport. Elle ne modifie pas le fichier principal.
+
+### Effectuer un import réel
+
+Le script exige une confirmation explicite et refuse le fichier de démonstration nommé `demo-providers.csv`.
+
+Exemple de commande avec un fichier CSV préparé et contrôlé :
+
+```powershell
+npm run import:providers:write -- --file imports/incoming/prestataires-reels.csv --confirm-real-data
+```
+
+**Attention :** cette commande écrit réellement dans `data/providers.json`. Vérifier la provenance des données et le contenu du fichier avant de l'exécuter.
+
+Le nom d'un fichier ne garantit pas que les données sont réelles. La protection actuelle contre les données de démonstration est une précaution élémentaire, pas un système complet de contrôle de provenance.
+
+## 8. Tests automatisés
+
+Au dernier contrôle, les tests suivants passaient :
+
+| Fichier                               |  Tests |
+| ------------------------------------- | -----: |
+| `search-providers.test.ts`            |      5 |
+| `filter-existing-providers.test.ts`   |      3 |
+| `import-providers-csv.test.ts`        |      8 |
+| `provider-store.test.ts`              |      3 |
+| `provider-import.integration.test.ts` |      1 |
+| **Total**                             | **20** |
+
+Les tests couvrent notamment la recherche, la validation CSV, les doublons, la sauvegarde, la conservation des données existantes et le refus d'écraser un JSON invalide.
+
+Pour relancer les vérifications :
+
+```bash
+npm run typecheck
+npm test
+```
+
+Ces résultats correspondent au dernier contrôle effectué pendant le développement. Il est recommandé de les relancer avant chaque publication.
+
+## 9. Données et précautions
+
+Le fichier `imports/incoming/demo-providers.csv` contient des données fictives destinées aux tests. Ces données ne doivent pas être présentées comme celles de véritables professionnels.
+
+Le fichier `data/providers.json` est actuellement le stockage local principal. Il ne s'agit pas encore d'une base de données centralisée.
+
+Avant une utilisation réelle :
+
+- collecter les données avec une provenance identifiable ;
+- vérifier l'existence et les coordonnées des prestataires ;
+- obtenir les autorisations nécessaires pour publier les informations ;
+- sauvegarder les données avant les imports importants ;
+- empêcher l'exposition de données non vérifiées comme si elles étaient fiables ;
+- prévoir une procédure de mise à jour et de suppression des informations obsolètes.
+
+## 10. Améliorations prévues
+
+Les prochaines étapes envisagées sont :
+
+1. Tester automatiquement les protections du script d'import.
+2. Améliorer le suivi de provenance des données.
+3. Séparer rigoureusement les données de test des données réelles.
+4. Produire un bilan d'import précis : lignes lues, erreurs, doublons et ajouts.
+5. Fiabiliser les numéros de ligne des erreurs, notamment pour les enregistrements CSV multilignes.
+6. Développer une procédure de vérification des prestataires.
+7. Évaluer les besoins d'une base de données persistante.
+8. Ajouter progressivement les fonctionnalités nécessaires au produit final.
+
+## 11. État du projet
+
+Le projet possède une première base fonctionnelle pour rechercher des prestataires, importer des fichiers CSV et enregistrer des données locales avec des tests automatisés.
+
+Il reste en développement. Les prestataires fictifs, les données en attente de vérification et les prestataires réellement vérifiés doivent rester clairement distingués.
+
+---
+
+**Projet :** Bondoukou MCP  
+**Langage principal :** TypeScript  
+**Statut :** développement actif

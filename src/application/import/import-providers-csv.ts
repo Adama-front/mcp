@@ -12,6 +12,13 @@ export interface CsvImportResult {
   errors: CsvImportError[];
 }
 
+interface CsvParsedRow {
+  record: Record<string, string>;
+  info: {
+    lines: number;
+  };
+}
+
 export function importProvidersCsv(
   content: string,
   now: string = new Date().toISOString(),
@@ -19,7 +26,7 @@ export function importProvidersCsv(
   const providers: Provider[] = [];
   const errors: CsvImportError[] = [];
 
-  let rows: Record<string, string>[];
+  let rows: CsvParsedRow[];
 
   try {
     rows = parse(content, {
@@ -28,13 +35,22 @@ export function importProvidersCsv(
       bom: true,
       trim: true,
       relax_column_count: false,
-    }) as Record<string, string>[];
+      info: true,
+    }) as CsvParsedRow[];
   } catch (error: unknown) {
+    const line =
+      typeof error === "object" &&
+      error !== null &&
+      "lines" in error &&
+      typeof error.lines === "number"
+        ? error.lines
+        : 1;
+
     return {
       providers,
       errors: [
         {
-          line: 1,
+          line,
           message:
             error instanceof Error ? error.message : "Fichier CSV invalide.",
         },
@@ -44,8 +60,8 @@ export function importProvidersCsv(
 
   const seenIds = new Set<string>();
 
-  rows.forEach((row, index) => {
-    const line = index + 2;
+  rows.forEach(({ record: row, info }) => {
+    const line = info.lines;
     const id = row.id?.trim();
 
     if (id && seenIds.has(id)) {

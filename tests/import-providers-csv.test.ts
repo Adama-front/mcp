@@ -83,4 +83,19 @@ describe("importProvidersCsv", () => {
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]?.line).toBe(3);
   });
+
+  it("conserve les vrais numéros de ligne après une ligne vide", () => {
+    const csv = [
+      "id,name,category,city",
+      "valid-001,Bon électricien,Électricien,Bondoukou",
+      "",
+      "invalid-002,A,Plombier,Bondoukou",
+    ].join("\n");
+
+    const result = importProvidersCsv(csv, "2026-10-24T10:00:00.000Z");
+
+    expect(result.providers).toHaveLength(1);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].line).toBe(4);
+  });
 });

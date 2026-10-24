@@ -6,7 +6,9 @@
   "scripts": {
     "test": "vitest run",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "import:providers": "tsx scripts/test-csv-import.ts",
+    "import:providers:write": "tsx scripts/test-csv-import.ts --write"
   },
   "keywords": [],
   "author": "",

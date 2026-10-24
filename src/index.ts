@@ -2,54 +2,53 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 
-import { providers } from "./providers.js";
+import { searchProviders } from "./application/search-providers.js";
+import { getProviders } from "./infrastructure/provider-store.js";
 
-const server = new McpServer({
-  name: "bondoukou-providers",
-  version: "1.0.0",
-});
+function createServer() {
+  const server = new McpServer({
+    name: "bondoukou-mcp",
+    version: "1.0.0",
+  });
 
-server.registerTool(
-  "search_providers",
-  {
-    description:
-      "Recherche des prestataires par métier et ville. Peut filtrer les prestataires disponibles.",
-    inputSchema: z.object({
-      service: z
-        .string()
-        .optional()
-        .describe("Métier recherché, par exemple electricien ou plombier"),
-      city: z
-        .string()
-        .default("Bondoukou")
-        .describe("Ville dans laquelle rechercher"),
-      availableOnly: z
-        .boolean()
-        .default(true)
-        .describe("Ne retourner que les prestataires disponibles"),
-    }),
-  },
-  async ({ service, city, availableOnly }) => {
-    const results = providers.filter((provider) => {
-      const matchesService =
-        !service || provider.service.toLowerCase() === service.toLowerCase();
+  server.registerTool(
+    "search_providers",
+    {
+      description:
+        "Recherche des prestataires par métier et ville à Bondoukou.",
+      inputSchema: z.object({
+        service: z.string().optional().describe("Métier recherché"),
+        city: z.string().default("Bondoukou").describe("Ville recherchée"),
+        includeUnverified: z
+          .boolean()
+          .default(false)
+          .describe("Inclure les prestataires non vérifiés"),
+      }),
+    },
+    async ({ service, city, includeUnverified }) => {
+      const providers = await getProviders();
 
-      const matchesCity = provider.city.toLowerCase() === city.toLowerCase();
+      const results = searchProviders(providers, {
+        service,
+        city,
+        includeUnverified,
+      });
 
-      const matchesAvailability = !availableOnly || provider.available;
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              results.length > 0
+                ? JSON.stringify(results, null, 2)
+                : "Aucun prestataire correspondant dans les données locales.",
+          },
+        ],
+      };
+    },
+  );
 
-      return matchesService && matchesCity && matchesAvailability;
-    });
+  return server;
+}
 
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(results, null, 2),
-        },
-      ],
-    };
-  },
-);
-
-await serveStdio(() => server);
+void serveStdio(createServer);

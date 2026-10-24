@@ -1,0 +1,12 @@
+[
+  {
+    "id": "test-001",
+    "name": "Prestataire de test",
+    "category": "Électricien",
+    "city": "Bondoukou",
+    "neighborhood": "Centre-ville",
+    "source": "imported_file",
+    "verificationStatus": "verified",
+    "updatedAt": "2026-10-23T10:00:00.000Z"
+  }
+]
